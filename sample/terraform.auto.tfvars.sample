@@ -1,0 +1,53 @@
+# Lambda Layers Sample - Configuration Example
+# Copy this file to terraform.auto.tfvars and modify the values
+
+# AWS Configuration
+aws_region = "us-east-1"
+
+# Tagging System
+client      = "pragma"
+project     = "genai-sample"
+environment = "dev"
+
+# Lambda Layers Configuration
+layers_config = {
+  # Example 1: Compiled layer with script
+  requests-layer = {
+    type        = "compile"
+    script_path = "scripts/build_requests.sh"
+    source_dir  = "layer_requests/"
+    filename    = "requests.zip"
+    description = "Python requests library layer"
+    runtime     = "python3.12"
+    additional_tags = {
+      purpose = "http-client"
+      team    = "backend"
+    }
+  }
+  
+  # Example 2: Pre-built ZIP file
+  utils-layer = {
+    type        = "file"
+    filename    = "utils-layer.zip"
+    description = "Utilities layer"
+    runtime     = "python3.12"
+    additional_tags = {
+      purpose = "utilities"
+      team    = "shared"
+    }
+  }
+  
+  # Example 3: Layer from S3 (for CI/CD pipelines)
+  prod-layer = {
+    type             = "s3"
+    s3_bucket        = "my-lambda-artifacts-bucket"
+    s3_key           = "layers/prod-layer-v1.0.0.zip"
+    source_code_hash = "sha256-abcdef123456..."
+    description      = "Production layer from S3"
+    runtime          = "python3.12"
+    additional_tags = {
+      purpose = "production"
+      version = "1.0.0"
+    }
+  }
+}
