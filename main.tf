@@ -21,7 +21,7 @@ resource "null_resource" "layer_compilation" {
   }
 
   provisioner "local-exec" {
-    command = "bash ${each.value.script_path}"
+    command = "${each.value.script_path}"
   }
 
   lifecycle {
