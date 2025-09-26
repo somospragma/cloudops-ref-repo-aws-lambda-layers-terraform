@@ -42,21 +42,20 @@ sample/
 
 ## Escenarios incluidos
 
-- **Layer compilado**: Ejemplo con script de compilación automática
-- **Layer desde archivo**: Ejemplo usando ZIP preexistente
-- **Layer desde S3**: Ejemplo para pipelines CI/CD
+- **Layer desde ZIP local**: Ejemplo usando archivos ZIP preexistentes (construidos por procesos externos)
+- **Layer desde S3**: Ejemplo para pipelines CI/CD con artefactos almacenados en S3
 
 ## Flujos de trabajo recomendados
 
 ### Desarrollo Local
-1. Usar tipo `compile` para desarrollo iterativo
-2. Scripts automatizan la instalación de dependencias
-3. Testing local antes de despliegue
+1. Usar tipo `zip` con archivos construidos externamente
+2. Procesos de build externos (scripts, CI/CD) crean los ZIP
+3. Terraform gestiona únicamente el despliegue del layer
 
 ### Pipeline CI/CD
 1. Usar tipo `s3` para artefactos pre-compilados
 2. Gestión de versiones con source_code_hash
-3. Despliegue automatizado
+3. Despliegue automatizado desde buckets S3
 
 ## Integración con otros servicios AWS
 

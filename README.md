@@ -8,14 +8,14 @@ Para más detalles sobre los cambios y versiones, consulte el [CHANGELOG.md](./C
 
 ## ✅ Características
 
-- ✅ Soporte para múltiples tipos de fuente (compile, file, s3)
-- ✅ Compilación automática de dependencias con scripts personalizados
-- ✅ Gestión de archivos ZIP pre-existentes
+- ✅ Soporte para múltiples tipos de fuente (zip, s3)
+- ✅ Gestión de archivos ZIP locales pre-existentes
 - ✅ Integración con S3 para pipelines de CI/CD
 - ✅ Sistema de etiquetado consistente
 - ✅ Validaciones de entrada robustas
 - ✅ Configuración flexible por layer
 - ✅ Compatibilidad con múltiples runtimes y arquitecturas
+- ✅ Separación de responsabilidades (build vs deploy)
 
 ## Estructura del Módulo
 
@@ -35,8 +35,6 @@ lambda-layers/
 
 - **Terraform**: >= 1.0
 - **Provider AWS**: >= 4.31.0
-- **Provider Archive**: >= 2.0
-- **Provider Null**: >= 3.0
 
 ### Provider Configuration
 
@@ -47,14 +45,6 @@ terraform {
       source  = "hashicorp/aws"
       version = ">=4.31.0"
       configuration_aliases = [aws.project]
-    }
-    archive = {
-      source  = "hashicorp/archive"
-      version = ">=2.0"
-    }
-    null = {
-      source  = "hashicorp/null"
-      version = ">=3.0"
     }
   }
 }
@@ -79,9 +69,8 @@ El módulo aplica tags automáticamente siguiendo la estrategia corporativa:
 
 ### Recursos Gestionados
 
-- `aws_lambda_layer_version`: Versiones de layers de Lambda
-- `null_resource`: Compilación de dependencias con scripts
-- `data.archive_file`: Creación automática de archivos ZIP
+- `aws_lambda_layer_version`: Versiones de layers de Lambda desde ZIP local
+- `aws_lambda_layer_version`: Versiones de layers de Lambda desde S3
 
 ### Parámetros de Entrada
 
@@ -97,23 +86,19 @@ El módulo aplica tags automáticamente siguiendo la estrategia corporativa:
 ```hcl
 layers_config = {
   layer-name = {
-    name        = "layer-name"
-    type        = "compile"  # compile, file, s3
+    type        = "zip"  # zip, s3
     description = "Descripción del layer"
     runtime     = "nodejs22.x"
     
-    # Para type = "compile"
-    script_path = "scripts/build-layer.sh"
-    source_dir  = "layer_output/"
-    filename    = "layer.zip"
-    
-    # Para type = "file"
-    filename = "existing-layer.zip"
+    # Para type = "zip" (archivo local)
+    zip_path = "path/to/layer.zip"
+    zip_hash = "sha256-hash"
     
     # Para type = "s3"
-    s3_bucket        = "bucket-name"
-    s3_key           = "path/to/layer.zip"
-    source_code_hash = "sha256-hash"
+    s3_bucket         = "bucket-name"
+    s3_key            = "path/to/layer.zip"
+    s3_object_version = "version-id"  # opcional
+    source_code_hash  = "sha256-hash"
     
     # Configuración adicional
     architecture    = "x86_64"
@@ -133,11 +118,15 @@ layers_config = {
 
 ### Ejemplos de Uso
 
-#### Ejemplo 1: Layer con Compilación Automática
+#### Ejemplo 1: Layer desde ZIP Local
 
 ```hcl
 module "lambda_layers" {
   source = "./modules/lambda-layers"
+  
+  providers = {
+    aws.project = aws
+  }
   
   client      = "pragma"
   project     = "genai"
@@ -145,11 +134,9 @@ module "lambda_layers" {
   
   layers_config = {
     requests-layer = {
-      name        = "requests-layer"
-      type        = "compile"
-      script_path = "scripts/build_requests.sh"
-      source_dir  = "layer_requests/"
-      filename    = "requests.zip"
+      type        = "zip"
+      zip_path    = "layers/requests-layer.zip"
+      zip_hash    = filebase64sha256("layers/requests-layer.zip")
       description = "Python requests library layer"
       runtime     = "python3.12"
     }
@@ -157,11 +144,15 @@ module "lambda_layers" {
 }
 ```
 
-#### Ejemplo 2: Layer desde Archivo Existente
+#### Ejemplo 2: Layer desde S3
 
 ```hcl
 module "lambda_layers" {
   source = "./modules/lambda-layers"
+  
+  providers = {
+    aws.project = aws
+  }
   
   client      = "pragma"
   project     = "genai"
@@ -169,11 +160,12 @@ module "lambda_layers" {
   
   layers_config = {
     utils-layer = {
-      name        = "utils-layer"
-      type        = "file"
-      filename    = "pre-built-utils.zip"
-      description = "Utilities layer"
-      runtime     = "nodejs22.x"
+      type             = "s3"
+      s3_bucket        = "my-lambda-artifacts"
+      s3_key           = "layers/utils-layer-v1.0.0.zip"
+      source_code_hash = "sha256-abcdef123456..."
+      description      = "Utilities layer from S3"
+      runtime          = "nodejs22.x"
     }
   }
 }
@@ -182,8 +174,8 @@ module "lambda_layers" {
 ## Escenarios de Uso Comunes
 
 ### 1. Desarrollo Local
-- Compilación automática de dependencias
-- Iteración rápida con scripts de build
+- Uso de archivos ZIP construidos externamente
+- Separación clara entre build y deploy
 - Validación local de layers
 
 ### 2. Pipeline CI/CD
@@ -192,14 +184,14 @@ module "lambda_layers" {
 - Despliegue automatizado
 
 ### 3. Entornos Mixtos
-- Combinación de layers compilados y pre-existentes
+- Combinación de layers locales y desde S3
 - Reutilización entre diferentes proyectos
 - Optimización de tiempos de despliegue
 
 ## Consideraciones Operativas
 
 ### Performance
-- Los layers se compilan solo cuando cambian los scripts
+- Despliegue rápido usando artefactos pre-construidos
 - Reutilización automática de layers existentes
 - Optimización de tiempos de despliegue
 
@@ -209,9 +201,9 @@ module "lambda_layers" {
 - Integración con sistemas de CI/CD
 
 ### Mantenimiento
-- Scripts de compilación versionados
-- Logs detallados de compilación
-- Rollback automático en caso de errores
+- Separación clara de responsabilidades
+- Gestión de versiones con hashes
+- Trazabilidad completa de artefactos
 
 ## Seguridad y Cumplimiento
 
@@ -227,7 +219,8 @@ module "lambda_layers" {
 
 ## Observaciones
 
-- **Dependencias**: Los scripts de compilación deben ser ejecutables y estar en la ruta correcta
+- **Artefactos**: Los archivos ZIP deben ser construidos externamente antes del despliegue
 - **Tamaño**: Los layers están limitados a 250MB (sin comprimir)
 - **Compatibilidad**: Verificar compatibilidad de runtime entre layer y función
 - **Versionado**: AWS crea automáticamente nuevas versiones para cada cambio
+- **Separación**: El módulo se enfoca únicamente en el despliegue, no en la construcción

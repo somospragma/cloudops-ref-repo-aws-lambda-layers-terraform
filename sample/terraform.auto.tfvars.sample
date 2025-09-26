@@ -8,15 +8,26 @@ aws_region = "us-east-1"
 client      = "pragma"
 project     = "genai-sample"
 environment = "dev"
+profile = "lab-chapter"
+
+# Common tags applied to all resources
+common_tags = {
+  environment = "dev"
+  project     = "genai-sample"
+  client      = "pragma"
+  owner       = "cloudops"
+  area        = "infrastructure"
+  provisioned = "terraform"
+  datatype    = "operational"
+}
 
 # Lambda Layers Configuration
 layers_config = {
-  # Example 1: Compiled layer with script
+  # Example 1: Layer from local ZIP file (built by external process)
   requests-layer = {
-    type        = "compile"
-    script_path = "scripts/build_requests.sh"
-    source_dir  = "layer_requests/"
-    filename    = "requests.zip"
+    type        = "zip"
+    zip_path    = "layers/requests-layer.zip"
+    zip_hash    = filebase64sha256("layers/requests-layer.zip")
     description = "Python requests library layer"
     runtime     = "python3.12"
     additional_tags = {
@@ -25,10 +36,11 @@ layers_config = {
     }
   }
   
-  # Example 2: Pre-built ZIP file
+  # Example 2: Another local ZIP layer
   utils-layer = {
-    type        = "file"
-    filename    = "utils-layer.zip"
+    type        = "zip"
+    zip_path    = "layers/utils-layer.zip"
+    zip_hash    = filebase64sha256("layers/utils-layer.zip")
     description = "Utilities layer"
     runtime     = "python3.12"
     additional_tags = {

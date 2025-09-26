@@ -1,85 +1,18 @@
 ###########################################
-#       Layer Resources                   #
+#       AWS Lambda Layer Resources       #
 ###########################################
 
-locals {
-  # Generate consistent layer names following convention: {client}-{project}-{environment}-layer-{map_key}
-  layer_names = {
-    for k, v in var.layers_config : k => "${var.client}-${var.project}-${var.environment}-layer-${k}"
-  }
-}
-
-# Create layer compilation resources (solo para type = "compile")
-resource "null_resource" "layer_compilation" {
-  for_each = {
-    for name, config in var.layers_config : name => config
-    if config.type == "compile"
-  }
-
-  triggers = {
-    script_hash = try(filesha256(each.value.script_path), "not-found")
-  }
-
-  provisioner "local-exec" {
-    command = "bash ${each.value.script_path}"
-  }
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Create archive files for compiled layers
-data "archive_file" "compiled_layers" {
-  for_each = {
-    for name, config in var.layers_config : name => config
-    if config.type == "compile"
-  }
-
-  type        = "zip"
-  source_dir  = each.value.source_dir
-  output_path = each.value.filename
-
-  depends_on = [
-    null_resource.layer_compilation
-  ]
-}
-
-# Create Lambda layers - type = "compile" 
-resource "aws_lambda_layer_version" "compiled_layers" {
+# Create Lambda layers from ZIP files (local, builder, etc.)
+resource "aws_lambda_layer_version" "zip_layers" {
   provider = aws.project
   for_each = {
     for name, config in var.layers_config : name => config
-    if config.type == "compile"
+    if config.type == "zip"
   }
 
   layer_name               = local.layer_names[each.key]
-  filename                 = data.archive_file.compiled_layers[each.key].output_path
-  source_code_hash         = data.archive_file.compiled_layers[each.key].output_base64sha256
-  compatible_runtimes      = [each.value.runtime]
-  compatible_architectures = [each.value.architecture]
-  description              = each.value.description
-
-  depends_on = [
-    data.archive_file.compiled_layers
-  ]
-
-  lifecycle {
-    create_before_destroy = true
-  }
-}
-
-# Create Lambda layers - type = "file"
-resource "aws_lambda_layer_version" "file_layers" {
-  provider = aws.project
-  for_each = {
-    for name, config in var.layers_config : name => config
-    if config.type == "file"
-  }
-
-  layer_name               = local.layer_names[each.key]
-  filename                 = each.value.filename
-  source_code_hash         = filebase64sha256(each.value.filename)
+  filename                 = each.value.zip_path
+  source_code_hash         = each.value.zip_hash
   compatible_runtimes      = [each.value.runtime]
   compatible_architectures = [each.value.architecture]
   description              = each.value.description
@@ -89,7 +22,7 @@ resource "aws_lambda_layer_version" "file_layers" {
   }
 }
 
-# Create Lambda layers - type = "s3"
+# Create Lambda layers from S3 objects
 resource "aws_lambda_layer_version" "s3_layers" {
   provider = aws.project
   for_each = {
@@ -100,6 +33,7 @@ resource "aws_lambda_layer_version" "s3_layers" {
   layer_name               = local.layer_names[each.key]
   s3_bucket                = each.value.s3_bucket
   s3_key                   = each.value.s3_key
+  s3_object_version        = each.value.s3_object_version != "" ? each.value.s3_object_version : null
   source_code_hash         = each.value.source_code_hash
   compatible_runtimes      = [each.value.runtime]
   compatible_architectures = [each.value.architecture]
